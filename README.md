@@ -7,7 +7,7 @@
 <p align="center">Performance Tuning that Delivers Proven Results</p>
 <p align="center"><a href="https://trentstuning.com/">TrentsTuning.com</a></p>
 
-<p align="center"><b>Written by Trenton Hill, Trent's Tuning LLC</b><br>
+<p align="center"><b>Written by Trenton Hill</b><br>
 Copyright 2026 Trent's Tuning LLC. All Rights Reserved.</p>
 
 ## Copyright and ownership
