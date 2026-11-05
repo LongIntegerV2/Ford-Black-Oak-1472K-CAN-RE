@@ -2,356 +2,390 @@
   <img src="logo.png" alt="Trent's Tuning LLC" width="300">
 </p>
 
-<h1 align="center">Black Oak 1472K CAN (TEJF4P5)</h1>
-<p align="center"><b>Full Reverse Engineering Writeup of the Ford 5.4L 3V PCM</b></p>
+<h1 align="center">Black Oak 1472K CAN</h1>
+<p align="center"><b>A Complete Technical and Functional Reference for the Ford 5.4L 3V Powertrain Control Module</b></p>
 <p align="center">Performance Tuning that Delivers Proven Results</p>
 <p align="center"><a href="https://trentstuning.com/">trentstuning.com</a></p>
 
 <p align="center"><b>Written by Trenton Hill, Trent's Tuning LLC</b><br>
 Copyright 2026 Trent's Tuning LLC. All Rights Reserved.</p>
 
+## Copyright and ownership
 
-## Copyright and ownership (read this first)
+This document and all of the engineering work behind it are the property of Trent's Tuning LLC and were authored by Trenton Hill. It is copyrighted and protected, 2026 Trent's Tuning LLC, all rights reserved. You are welcome to read it, learn from it, and reference it for your own study and research. You may not copy it, repackage it, resell it, present it as your own work, or use it in a commercial product or service without written permission from Trent's Tuning LLC.
 
-This whole writeup and all the reverse engineering in it was done by me, Trenton Hill, and it is the property of Trent's Tuning LLC, and it is copyrighted and protected, 2026 Trent's Tuning LLC, all rights reserved. You can read it and learn from it and reference it for your own knowledge and research, but you can not copy it, repackage it, resell it, or pass it off as your own work, and you can not use it for a commercial product or service without written permission from Trent's Tuning LLC, yk just respect the work that went into this lmao it took forever.
+Several topics in this reference are marked **REDACTED**. For those topics the document still explains what the thing is and what it does in general engineering terms, but the Black Oak specific implementation details are proprietary to Trent's Tuning LLC and are deliberately withheld. This covers the bootloader, the operating system kernel, module reading and writing and reflashing, security access and the seed and key exchange, the firmware validation and checksum, the custom operating system and any custom features, and bidirectional actuator control.
 
-And anything in here that says REDACTED is proprietary Trent's Tuning internal stuff and it stays that way, that is the bootloader, the kernel, anything about reading or writing or flashing the module, the custom OS and any custom features, bidirectional controls, and seed key security, none of that is published here on purpose.
+## How to read this reference
 
-
-## What this is
-
-Alright so this is basically everything I figured out about the 2004 to 2006 Ford 5.4L 3 valve "Black Oak" PCM, the 1472K CAN version specifically, strategy code TEJF4P5, and I put it all in one place so anybody doing reverse engineering or dev work or tuning on these trucks can actually understand how the computer works from top to bottom instead of poking at tables blind, yk. I spent a stupid amount of time in Ghidra going function by function and table by table and following how it all ties together, and this is the result of all that.
-
-The idea is pretty simple, you read this and you basically know the whole PCM, the logic, the systems, the subsystems, the sensors, the fuel, the spark, the trans, the CAN, all of it, so when you go to work on Black Oak you actually know what you are touching.
-
-Couple heads up before we get into it. This is a race and off road and bench research writeup, none of this is for a street car and I am not responsible for what anybody does with it, use your head. And like I said some stuff says REDACTED on purpose and that stays in house, everything else, the actual engine control logic and the calibration, I am laying it all out.
-
+This is written to take someone from new to the subject all the way to an engineering level understanding of the Black Oak 1472K CAN powertrain control module, which from here on is called the PCM. It describes the platform in general rather than any one vehicle or calibration file, so there are no part specific identifiers and no memory addresses anywhere in it. Terms that may be unfamiliar are explained the first time they appear, and there is a full glossary at the end. If you are brand new, read it top to bottom. If you already know engine control, you can jump to any subsystem, since each section stands on its own.
 
 ## Table of contents
 
-* [What Black Oak even is](#what-black-oak-even-is)
-* [The chip and how the firmware is built](#the-chip-and-how-the-firmware-is-built)
-* [How I actually reversed it, the xref problem](#how-i-actually-reversed-it-the-xref-problem)
-* [Memory map](#memory-map)
-* [Sensors and the ADC pipeline](#sensors-and-the-adc-pipeline)
-* [Air charge and load, the backbone](#air-charge-and-load-the-backbone)
-* [Fuel](#fuel)
-* [Spark](#spark)
-* [Crank and cam sync and RPM](#crank-and-cam-sync-and-rpm)
-* [Knock](#knock)
-* [Variable cam timing, Ti VCT](#variable-cam-timing-ti-vct)
-* [Electronic throttle, driver demand, idle, torque, limiters](#electronic-throttle-driver-demand-idle-torque-limiters)
-* [Transmission, 4R75E](#transmission-4r75e)
-* [Cruise and steering wheel switches](#cruise-and-steering-wheel-switches)
-* [CAN bus](#can-bus)
-* [OBD II and the monitors](#obd-ii-and-the-monitors)
-* [Accessories](#accessories)
-* [Calibration, the tables and scalars](#calibration-the-tables-and-scalars)
-* [The numbers, what got done](#the-numbers-what-got-done)
-* [The REDACTED stuff](#the-redacted-stuff)
-* [Full function map](#full-function-map)
+* [Part 1, Foundations](#part-1-foundations)
+* [Part 2, Sensing and inputs](#part-2-sensing-and-inputs)
+* [Part 3, Air and fuel](#part-3-air-and-fuel)
+* [Part 4, Spark and combustion timing](#part-4-spark-and-combustion-timing)
+* [Part 5, Timing and synchronization](#part-5-timing-and-synchronization)
+* [Part 6, Knock](#part-6-knock)
+* [Part 7, Variable cam timing](#part-7-variable-cam-timing)
+* [Part 8, Torque based control, throttle, idle, limiters](#part-8-torque-based-control-throttle-idle-limiters)
+* [Part 9, Transmission, the 4R75E](#part-9-transmission-the-4r75e)
+* [Part 10, Driver interface](#part-10-driver-interface)
+* [Part 11, Communication and diagnostics](#part-11-communication-and-diagnostics)
+* [Part 12, Accessories](#part-12-accessories)
+* [Part 13, The calibration surface](#part-13-the-calibration-surface)
+* [Part 14, Memory and regions](#part-14-memory-and-regions)
+* [Part 15, Proprietary internals, explained and REDACTED](#part-15-proprietary-internals-explained-and-redacted)
+* [Part 16, Scope of the teardown](#part-16-scope-of-the-teardown)
+* [Part 17, Full function map](#part-17-full-function-map)
+* [Glossary](#glossary)
 * [About and contact](#about-and-contact)
 
+# Part 1, Foundations
 
-## What Black Oak even is
+## What the Black Oak 1472K CAN PCM is
 
-Black Oak is the Ford name for the PCM strategy family on the 04 to 06 F150 and some other stuff with the 5.4 3 valve, and 1472K CAN is the specific version I worked on, strategy code TEJF4P5. It is the computer that runs the whole engine and the trans, so fuel, spark, cam timing, the electronic throttle, the torque model, the limiters, closed loop fuel, OBD, CAN broadcasting, all of it lives in here.
+A powertrain control module is the computer that runs the engine and, on an automatic vehicle, the transmission. Black Oak is the internal Ford name for the control software family used on the 2004 to 2006 F150 and related trucks fitted with the 5.4 liter three valve modular V8, and 1472K CAN is the specific variant covered here, the one that communicates on a Controller Area Network bus. The PCM reads the sensors on the engine, decides how much fuel to inject, when to fire each spark, where to position the camshafts and the electronic throttle, how to manage the transmission, and it reports all of this to the rest of the vehicle and to a diagnostic tool.
 
-The thing to get right away is that it is really two pieces, there is the **strategy** which is the actual program and code, and then there is the **calibration** which is thousands of tables and scalars, and Ford writes the code once and just swaps the calibration per vehicle, yk so the same strategy runs a bunch of different trucks and only the numbers change. That is why when people say tune they mean the calibration side, but to really know what a table does you gotta understand the code that reads it, and that is the part nobody usually has, so that is what most of this writeup is.
+Everything the PCM does happens dozens to thousands of times per second, in a fixed order, forever, while the key is on. It is a hard real time system, which means tasks are not just expected to produce the right answer, they are expected to produce it within a strict time budget tied to crankshaft rotation, because a spark that is correct but late is still a misfire.
 
+## The processor and the way the firmware is organized
 
-## The chip and how the firmware is built
+The PCM is built around a Freescale MPC5xx series microcontroller. This is a 32 bit PowerPC processor, it is big endian, which describes the byte order it stores numbers in, and it has a hardware floating point unit. That floating point unit matters more than it sounds, because it means the calibration values inside the PCM are stored as real IEEE 754 floating point numbers rather than the scaled integers that older engine computers were forced to use. In practice that means a table value is simply the number it represents, which makes the whole calibration far easier to reason about.
 
-Black Oak runs on a **Freescale MPC5xx PowerPC**, it is 32 bit, big endian, and it has a hardware floating point unit, and that last part actually matters because basically every calibration value in here is an **IEEE 754 float**, not some scaled integer like alot of older ECUs, so the tables are real floating point numbers which is nice.
+The firmware is split into two clearly separated layers, and understanding this split is the single most useful idea for anyone working on these modules.
 
-The chip does all the hard real time stuff in its on chip peripherals instead of in plain code, so you got:
+The first layer is the **strategy**, which is the program itself, the compiled code that implements every control algorithm. The second layer is the **calibration**, which is the large body of tables and scalars that the strategy reads to make its decisions. Ford writes the strategy once and reuses it across many vehicles, and then ships a different calibration for each application. The engine behaves the way it does because of the numbers in the calibration, but what those numbers mean is defined entirely by the strategy code that consumes them. This is why genuine tuning knowledge is really knowledge of the strategy. A table by itself is just a grid of numbers until you know which function reads it, when, and what it does with the result.
 
-* **TPU (Time Processor Unit)**, this handles the crank and cam tooth capture and the injector and coil output timing, it is basically its own little timing coprocessor and it runs microcode, so there is no normal crank ISR to read, you just read the results the TPU hands you.
-* **QADC**, dual queued A to D, this scans all the analog sensors.
-* **MIOS**, the on chip timer and PWM block, used for stuff like the cam oil control valves.
-* **TouCAN**, the CAN controller.
-* an external **smart I/O ASIC**, extra PWM outputs like the throttle and solenoids, the oxygen sensor A to D, and a dedicated **knock detection ASIC**.
+## The peripherals that make it a real time engine controller
 
-So one thing that trips people up, the PCM has **two different PWM output systems**, the on chip MIOS and the external ASIC, and **two different analog front ends**, the QADC and the ASIC A to D for the O2s, and you gotta know which one you are looking at or nothing makes sense, yk.
+A general purpose processor cannot, on its own, catch a crankshaft tooth edge to the microsecond or fire eight coils at precise angles. The MPC5xx does that work in dedicated hardware blocks that run alongside the main processor.
 
+The **Time Processor Unit**, or TPU, is effectively a small timing coprocessor with its own microcode. It captures the crankshaft and camshaft tooth signals and it generates the precisely timed output pulses that fire the injectors and charge the coils. Because the tooth decoding lives in TPU microcode rather than in ordinary program code, the main strategy does not decode teeth itself, it reads the already measured results the TPU hands back.
 
-## How I actually reversed it, the xref problem
+The **Queued Analog to Digital Converter**, or QADC, is a dual channel analog front end that scans the engine sensors and converts their voltages into numbers. The **Modular Input Output Subsystem**, or MIOS, is an on chip block of timers and pulse width modulation channels, used for outputs such as the camshaft oil control valves. The **TouCAN** block is the Controller Area Network controller that handles all bus communication.
 
-Ok so this is the part I am actually proud of and it is the whole reason this writeup even exists, because without this you basically can not reverse engineer Black Oak at all.
+Alongside the microcontroller is an external smart input output application specific integrated circuit, usually just called the ASIC. It provides additional pulse width modulation outputs such as the throttle motor and solenoids, it contains the analog to digital path for the oxygen sensors, and it houses a dedicated knock detection circuit. The practical consequence is that the PCM has two different pulse width modulation output systems, the on chip MIOS and the external ASIC, and two different analog front ends, the on chip QADC and the ASIC path used for the oxygen sensors. Knowing which one a given output or input belongs to is essential, because they are programmed in completely different ways.
 
-**Problem 1, the banked flash.** A full read of the flash is a couple arrays stuck together in address order, so the second array's real runtime address is NOT where it sits in the file, and if you just load the bin raw into Ghidra every single reference the code makes into the calibration points off into nothing, and the disassembler builds almost no cross references, so it looks like the code barely even touches its own tables which is obviously wrong. So step one is rebuilding the memory map so every byte sits where the CPU actually sees it, plus feeding Ghidra the small data base register values the compiler assumed, and that alone brings back most of the analysis. Honestly if you skip this nothing else works.
+## How the PCM actually runs, for newcomers
 
-**Problem 2, the tables hide on purpose.** Most of the tables are not reached by a pointer word you can just follow, the code **builds the address inline** right before it uses it, like it loads the top half and the bottom half of the address into a register with immediates and then goes and reads a little **descriptor**, and that descriptor is what points at the table's axes and its actual cell data. A 2D descriptor has an x count, a y count, a pointer to the X axis breakpoints, a pointer to the Y axis, and a pointer to the grid of cells, and a 1D one has a count and a pointer to interleaved breakpoint and value float pairs. And there is really just two lookup primitives doing all of it, a **1D interpolator** and a **2D bilinear interpolator**, and the 2D one is almost always called like lookup(rpm, load, table). But because the address is baked into the instruction as an immediate, stock Ghidra just sees a pile of constants and zero xrefs, so you get thousands of defined tables and almost no references and you are stuck.
+Inside the running module there is a small operating system that schedules the control tasks. Some tasks run on a fixed time base, for example a background task every several milliseconds. The most important tasks run on an angular base, meaning they are triggered by crankshaft position rather than by the clock, because fuel and spark decisions must be made per cylinder event and the time available shrinks as engine speed rises. Interrupts from the TPU and the timers preempt ordinary work when a tooth arrives or an output must fire. The details of that scheduler are part of the operating system and are covered, at the level appropriate for a public document, in Part 15.
 
-So what I did, I wrote a **custom constant propagation scanner** that walks every instruction, rebuilds the control flow from the entry points and from every function pointer stored in flash, tracks each register as a known value as it flows through the code, records every address the code actually builds, and then follows the descriptor to axis to grid pointer chain to see where each map really gets read. That is what turned it from no xrefs into near complete coverage, and it recovered a TON of references (numbers are down in the [numbers section](#the-numbers-what-got-done)), and that is what made it possible to actually reverse engineer functions and know which table feeds which system, yk that is the key that unlocked everything else.
+# Part 2, Sensing and inputs
 
+## The analog pipeline
 
-## Memory map
+Almost every analog sensor on the engine reaches the strategy through the same pipeline, and learning that pipeline once explains every sensor at the same time. The QADC continuously scans its inputs into a set of result registers. A per channel accessor reads a result and averages a short burst of samples to reject electrical noise. A scaling step then converts the raw converter counts into real engineering units using a gain and an offset, so volts become degrees, or kilopascals, or grams per second. Finally a general purpose rationality filter applies range checking, debounce, slew rate limiting, and a lag filter, and only then does the finished value, together with any fault flags it raised, become the number the rest of the strategy uses.
 
-High level on purpose, since the exact flashing regions tie into stuff I am not publishing:
+A subtle but important point is that the channel a reader asks for is a slot in the conversion queue, not a physical pin. The mapping from queue slot to physical pin is set up once at initialization. What the strategy consumes, a given slot producing a given scaled sensor value, is fully defined, and the physical wiring simply sits underneath it.
 
-* **Low flash and bootloader region**, REDACTED
-* **Main application code**, the strategy, all the engine and trans control functions
-* **Upper flash and calibration band**, this is where the big block of tables and scalars I worked on lives, it is a whole band of calibration data separate from the classic table region
-* **RAM**, all the live variables, sensor values, state machines, the keep alive stuff, extra
-* **IO and peripheral space**, the TPU, QADC, MIOS, CAN, and the external ASIC all map in here
+The oxygen sensors are the one exception to this pipeline. They are not read through the QADC at all, they are read through the external ASIC's own analog to digital path, because their signal conditioning is handled in that chip.
 
-The processor is big endian and the image base and the block boundaries all got confirmed against the code itself so the map is accurate, and anything past that about read and write and the flashing side is REDACTED.
+## The sensor set
 
+**Engine speed** begins at the crankshaft. The TPU captures the tooth timing and measures the interval between tooth edges. A speed computation converts that interval into revolutions per minute and also produces the current cylinder event index, which tells the rest of the strategy which cylinder is next in the firing order. A further processing stage performs stall and running detection and filtering, and notably it produces two distinct speed values, a control speed used by the limiters and the fuel system, and a separate map axis speed used to index the tables. Keeping those two separate avoids table lookups jittering on raw speed noise.
 
-## Sensors and the ADC pipeline
+**Vehicle speed** is derived from the output shaft or driveshaft signal and is produced both as a precise floating point value and as a compact single byte value for broadcasting.
 
-### The pipeline
+**Throttle position** on this platform uses two sensors on the electronic throttle body, and the **accelerator pedal** has its own separate redundant sensor pair. These are kept distinct because the pedal expresses what the driver is asking for, while the throttle sensors report where the throttle plate actually is, and the control system constantly compares the two.
 
-All the analog inputs come in through a scanned queue, and the flow is pretty consistent, the QADC result registers get read by a per slot accessor that averages a 3 sample triple, then a group reader scales the raw counts into real engineering units with a gain and offset, and then a generic **rationality filter** does the over and under range debounce, the slew limiting, and a lag filter before the final value and its fault flags land in RAM. There is also a digital port reader for QADC pins being used as on and off inputs. The O2 sensors are the odd one out, they do not go through the QADC, they come in through the external ASIC's own A to D.
+**Mass airflow** is measured by a hot film sensor whose voltage is converted to a mass flow rate through a transfer table, which is one of the most important calibration tables in the whole module. **Manifold pressure** on this engine is normally not measured by a sensor at all, it is modeled from the airflow and the volumetric efficiency model, with a true sensor path available behind a configuration switch. **Coolant temperature** and **intake air or charge temperature** are thermistor inputs, and the charge temperature reader includes a failsafe fallback if the sensor reads implausibly. **Battery voltage** is filtered and then used in many places, including coil dwell, injector dead time compensation, throttle control, and alternator control.
 
-One subtle thing, the QADC channel a reader asks for is a slot in the conversion queue, not a physical pin, the pin to slot mapping is in the command word table set up at init, so what the firmware actually uses, slot to scaled sensor, is fully known, the physical pin layer just sits on top of it.
+The **oxygen sensors**, front and rear on both banks, are read through the ASIC, filtered, and compared against a stoichiometric switch voltage with hysteresis to produce a clean rich or lean indication per bank. Additional dedicated readers cover **fuel rail pressure and temperature**, **intake manifold runner control position**, and the **returnless fuel pump duty feedback**. The **steering wheel cruise switches** are read as an analog resistor ladder on a single converter slot, described in Part 10.
 
-### What it reads
+# Part 3, Air and fuel
 
-* **Engine speed**, comes off the crank through the TPU, a capture ISR turns the tooth timing into a crank period, then an RPM compute function turns that into RPM and the current cylinder event index, and a speed update does stall and run detect and filtering and gives you the **control RPM** for limiters and fuel and the **map axis RPM** for indexing tables, and those are two separate things yk.
-* **Vehicle speed**, from the driveshaft signal, both a float and a 0 to 255 byte version.
-* **Throttle position**, dual sensors, TPS1 and TPS2, for the electronic throttle, filtered fast and slow and checked against min and max voltage.
-* **Accelerator pedal (APP)**, its own redundant pair, totally separate from the throttle sensors, this is driver demand.
-* **Mass airflow (MAF)**, a transfer function runs a volts to mass breakpoint table, that is the MAF cal.
-* **Manifold pressure (MAP)**, on this truck MAP is normally **modeled** from the cam corrected VE model, not read off a sensor, there is a real MAP path but it is behind a config switch.
-* **Coolant (ECT)** and **air charge and intake temp (ACT and IAT)**, the ACT one has a failsafe fallback if it goes bad.
-* **Battery voltage**, filtered and then used all over, dwell, injector dead time, throttle, alternator, extra.
-* **O2 sensors front and rear, both banks**, through the ASIC A to D, each one filtered and compared to a stoich switch voltage with hysteresis to get a rich or lean state per bank.
-* **Fuel rail pressure and temp, IMRC position, and the returnless fuel pump duty feedback**, each on its own QADC reader.
-* **Cruise and steering wheel switches**, an analog resistor ladder on one QADC slot, more on that later.
+## Air charge and load, the quantity everything depends on
 
+If you only deeply understand one subsystem, make it this one, because nearly every other table in the module is indexed by the number it produces.
 
-## Air charge and load, the backbone
+The PCM estimates how much air each cylinder is taking in, the cylinder air charge, using three methods and blending or selecting among them by operating condition. The first is the mass airflow method, which is primary whenever the airflow sensor is valid. The second is the speed density method, which infers air charge from the modeled manifold pressure and a volumetric efficiency model. Volumetric efficiency is the ratio of the air the cylinder actually ingests to the air it theoretically could at the current conditions, and the model blends several volumetric efficiency tables according to the current camshaft advance, so camshaft timing directly reshapes the air estimate. The third is a throttle based method, sometimes called alpha N, which estimates air from throttle angle and speed and is used when the airflow sensor is unavailable or at very low throttle openings.
 
-This is probably the most important subsystem in the whole thing because everything downstream hangs off it, yk so pay attention to this one.
+Around these three methods sits a chain of supporting steps, a manifold pressure validity check, a source selection, an airflow rationality gate, a key on high flow check, a transient fuel filter that handles the extra fuel needed during throttle tip in and the removal of fuel during tip out as fuel films form and evaporate on the port walls, a current charge calculation, and predictive estimators that project the charge a fraction of an engine cycle ahead so that fuel and spark can be scheduled for where the engine will be, not where it was.
 
-The PCM figures out cylinder air three different ways and picks or blends them by where you are operating, there is the **MAF** path, the main one when the MAF is good, a **speed density** path, the modeled MAP from the VE model, and a **throttle based alpha N** path, used when the MAF is invalid or at low throttle. And the VE core blends a few volumetric efficiency tables by the current **cam advance fraction**, so your cam timing literally reshapes the airflow estimate, that is a big deal on a 3V with Ti VCT.
+The output of all of this is engine load, defined as the cylinder air charge divided by a reference standard air charge. Load is the vertical axis of essentially every fuel, spark, cam, and knock table in the module. The subsystem also computes an air density correction, a normalization divisor, a small leak and offset compensation, and a measure of how close the engine is to wide open throttle. Because load is produced here and consumed everywhere, any error here propagates into fuel and spark across the entire map, which is why airflow and load are the first things to verify after any significant hardware change such as a camshaft or injector swap.
 
-There is a whole chain of little steps in the air charge calc, a MAP validity debounce, a MAP source select, a MAF rationality gate, a key on high flow check, the **transient fuel filter**, that is your accel and decel tip in tip out wall wetting comp, a current charge calc, and then quadratic charge **predictors** that anticipate the charge a little bit ahead, one for the SD path and one for the throttle path, and then an arbitration picks current or filtered or anticipated based on a couple cal switches.
+## Fuel delivery
 
-And then the load model spits out the single most important number in the strategy, **engine load equals cylinder air charge divided by a standard air charge scaler**, and that load value is the Y axis of basically every fuel, spark, cam, and knock table, so it is used everywhere. It also does an air density correction off an air temp by coolant temp table, an air drift divisor, an air charge leak and offset comp, and a normalized load versus WOT term. So yeah if your airflow model is off after a cam swap or injectors or whatever, this is the area that has gotta get fixed or everything downstream is wrong.
+Base fuel quantity comes directly from the air charge and a target air to fuel ratio. That fuel mass is converted into an injector opening time, the pulse width, by a dual slope injector model. Real injectors do not flow linearly across their whole operating range, so the model uses a low slope and a high slope joined at a breakpoint, adds compensation for fuel pressure since higher differential pressure pushes more fuel through the same opening, and enforces a minimum pulse width below which an injector cannot be trusted to open repeatably. The finished pulse width is then handed to the timing hardware to be delivered at the correct crank angle. The module contains two injection schedulers, a sequential scheduler that fires each injector individually in the firing order, and a bank or simultaneous scheduler used during starting, and both can divert into a shared injector disable routine that simply commands no fuel.
 
+## Closed loop fuel trim
 
-## Fuel
+Open loop fueling relies on the models being perfect, which they never are, so the PCM measures the result at the oxygen sensor and corrects. A closed loop fuel manager runs this correction for each bank. The short term controller is the classic Ford exhaust gas oxygen integrator. Each time the oxygen sensor switches between rich and lean it jumps the correction by a step, then ramps it gradually, incorporating a transport delay that accounts for the time for exhaust to travel from the valve to the sensor, a hold time, and a bias drawn from speed and load tables along with contributions from the rear sensor and from air conditioning load. The result is a short term fuel multiplier per bank, bounded by a limit manager that also governs open loop defaults. When the system is in open loop, for example at wide open throttle or before the sensors are warm, the trim is forced back to the neutral stoichiometric value.
 
-### Delivery
+## Adaptive fuel learning
 
-Base fuel comes from the air charge and a target air fuel ratio, and then it gets turned into an injector pulse width by a **dual slope injector model**, so there is a low slope and a high slope with a breakpoint between them (ALOSL, AHISL, FUEL_BKPT), plus fuel pressure compensation and a minimum pulse width (MINPW), and then it gets scheduled out to the injectors through the timing module. There is two injector schedulers, a **sequential** one and a **bank and simultaneous** one that is used at start, and a dedicated **injector disable (fuel cut)** routine that both of them can divert into.
+Short term trim corrects instantly but forgets instantly. The long term adaptive system, usually called keep alive memory or KAM, watches the short term trim and, once it has been stable long enough as judged by a maturity counter, learns the steady state error into cell tables held in battery backed memory, indexed by airflow or load. These learned corrections are clamped to minimum and maximum limits, they adapt faster while the engine is warming up, and they are applied to the injector pulse so that the short term trim can stay centered near zero. A configuration switch selects whether the learning is referenced to measured airflow or to the speed density model. The single most important practical fact about this system is that if adaptive learning is left enabled it will slowly compensate for deliberate fueling changes, effectively undoing them over time, so it is normally disabled while fuel is being developed.
 
-### Closed loop
+## Cranking, cold start, and warm up
 
-There is a top level **closed loop fuel manager** that runs the trim per bank. The **short term** part is the classic Ford EGO jumpback and ramp integrator, so on every O2 switch it jumps the correction and then ramps it with a transport delay and a hold time percentage, and it adds a closed loop bias from rpm by load tables plus rear O2 and A/C bias terms, and the output is your per bank short term fuel multiplier, and a limit manager bounds it and handles the open loop defaults and the hold behavior, and when it is open loop it forces the trim back to stoich.
+Starting an engine needs its own fuel logic. A mode selector chooses sequential or simultaneous injection based on the temperature at the moment of the start. A family of cranking tables sets the target ratio during cranking, a fuel multiplier that decays with time since the start, a wall wetting or lost fuel term that accounts for fuel that condenses on cold surfaces, an injection delay, and a dedicated cranking spark value. Because the airflow transfer table sits upstream of fuel, load, and spark all at once, it influences every one of these.
 
-Then the **long term adaptive (KAM)** learner watches the short term trim, and once it has been stable long enough, a maturity counter, it learns the steady state error into per bank cell tables in keep alive RAM, indexed by airflow and load, clamped to min and max adapt limits (MAXADP, MINADP), with a faster gain while the engine is still warming up. And a config switch picks whether it references MAF mass or speed density. **This is the one to know about when tuning**, if you leave the adaptive learn switch on, KAM will slowly learn out your fueling changes over time, so you turn it off (FADPT_SW and KAM_NO_RESET type stuff) when you are dialing in fuel so it stops fighting you, yk.
+## Decel fuel shut off
 
-### Cranking and cold start
+When the driver lifts off at speed the engine does not need fuel to keep spinning, so the PCM can shut the injectors off entirely to save fuel and reduce emissions. An entry function arms a decel cut when the throttle is closed and engine speed, vehicle speed, the speed to gear ratio, and load are all above their thresholds, with separate lower thresholds for exiting so the function does not rapidly toggle. An apply stage turns that into the actual injector cut with controlled ramp in and ramp out, and a transition stage smooths the tip back in so the return of fuel is not felt as a bump.
 
-A crank fuel mode selector picks sequential or simultaneous injection based on start temp, and then there is a family of crank tables for cranking lambda, a fuel multiplier versus time since start, the wall wetting lost fuel, injection delay, and cranking spark, extra. The MAF transfer table sits upstream of all of this so it affects fuel and load and spark all at once.
+## Airflow plausibility monitoring
 
-### Decel fuel shut off (DFCO)
+Separate from the airflow transfer that computes fuel, a monitoring dispatcher runs the plausibility diagnostics for the airflow sensor. Several rate limited filters feed accumulators that set circuit fault codes when the signal is out of range. This path is diagnostic only and does not itself compute fuel, which is a common point of confusion.
 
-An entry function sets a decel cut active flag when the throttle is closed and RPM and vehicle speed and n over v and load are all over their enable thresholds, and there is separate lower exit thresholds for hysteresis so it does not chatter. Then an apply and ramp function turns that into the actual fuel cut the injector scheduler obeys, with ramp in and ramp out counters, and a transition function smooths the tip in and tip out around it. Cals like DFSRPM_PC, DFLOD, DFSECT, DFS_PRV_N, and LAM_REACT live here.
+# Part 4, Spark and combustion timing
 
-### MAF monitor
+## Computing spark advance
 
-There is a separate dispatcher that runs the MAF plausibility diagnostics, a few rate limited filter variants feed accumulators and if they go out of range they set the MAF circuit codes, but that is diagnostic only, it does not compute fuel, so do not confuse it with the MAF transfer.
+Spark timing is expressed as advance, the number of crankshaft degrees before top dead center at which the mixture is ignited. A per cycle spark advance manager coordinates the whole calculation. It begins with a best torque lookup, the timing that would produce maximum torque if nothing limited it, usually abbreviated MBT. In parallel it computes a borderline value, the most advance that is safe before the onset of knock, built from a knock limited table with added corrections for intake geometry such as the runner control state and for camshaft phase, then interpolated against load and speed and modified by a global octane term. A ramp and limiter slews the working value toward its target using knock recovery rate tables, so timing is restored gradually rather than snapped back after a correction.
 
+The decisive step is the arbiter. It takes the minimum across every candidate, the best torque ceiling, the borderline limit, a torque model ceiling, the accumulated knock retard, and an overspeed floor, and it records a code identifying which term won. The result is written into the per cylinder advance array. Because the arbiter always takes the minimum, on any knock prone combination the borderline table is what actually governs timing under load, since it is usually the lowest of the candidates there. That is the single most important thing to understand about tuning spark on this platform.
 
-## Spark
+The torque model ceiling deserves its own mention. The engine's torque is modeled as a function of spark, and two functions invert that relationship, using coefficient tables indexed by speed and load, to find the exact amount of spark retard from best torque that will deliver a requested torque target. This is how the torque based control system reaches into spark, and it is completely separate from the knock sensor retard.
 
-### Advance
+## Scheduling the spark angle and charging the coils
 
-A per cycle **spark advance manager** runs the chain. A **best torque (MBT) lookup** gives the MBT ceiling, that is the ideal timing if fuel and knock let you have it. Then a separate **borderline, knock limited, lookup** builds a per load borderline curve and adds intake geometry (charge motion and IMRC) and cam phase corrections, and a borderline final step interpolates it against load and RPM and adds a global octane modifier. A **ramp and limiter** slews the working spark toward the limit using the knock recovery rate tables and keeps track of which limit owns the timing right now.
+Once a final advance is chosen it must become physical coil events. An angle scheduler converts the commanded advance into a per cylinder end of dwell angle, applies the firing order remap and the coil pairing arrangement, and sets the per cylinder event masks. A dwell update then runs for each spark event. Dwell is the length of time a coil is charged before it fires, and getting it right matters because too little dwell gives a weak spark while too much wastes energy and heats the coil. The dwell computation uses a measured charge feedback multiplied by a harness compensation term with battery voltage correction, or a fixed dwell with a per cylinder trim, clamps the result between voltage derived minimum and maximum limits, and writes each coil channel and its firing angle to the timing hardware. The ignition is coil on plug, one coil per cylinder. A coil setup function builds the dwell versus voltage relationship and the multi strike configuration, and a repetitive spark controller manages multi strike firing at low speeds.
 
-And then the **arbiter** takes the **minimum** across every term, MBT, borderline, a torque model ceiling, knock retard, and an overspeed floor, and it records a little **source code** for which one won, and an output apply stage pushes the final number into the per cylinder advance array. So the big thing to get here, on a knock prone combo the borderline table (FN2200A Borderline Knock Table and friends) is what actually sets your timing under load, because the arbiter takes the min so borderline wins whenever it is lower than MBT, yk that is where you are really tuning timing.
+One architectural detail is worth stating because it is easy to misread. The per cylinder fire mask that appears in this path is a software record used for misfire bookkeeping. It is not the signal the coil hardware fires on. The physical coil charging is governed by the dwell value written to the timing hardware.
 
-The **torque based spark ceiling** is one of those arbiter terms and it is separate from the knock retard, two functions invert a parabolic torque versus spark model, coefficients by rpm and load, to find the spark delta off MBT that meets the torque target, so the torque model can pull timing too, not just knock.
+## The spark and fuel enable gate
 
-### Angle scheduling and dwell
+A single global flag enables or disables combustion. A spark and dwell event scheduler checks that flag, along with a spark blanking counter, and when disabled it writes zero dwell to every channel so no coil charges. That same flag is also read by the fuel injector scheduler, which diverts to the injector disable routine when it is set. The consequence is that the one factory global kill cuts spark and fuel together, it is not a spark only mechanism. That flag is owned by the crankshaft synchronization state machine described in Part 5, and during normal running it stays clear.
 
-An **angle scheduler** turns the commanded advance into a per cylinder end of dwell, the spark angle, applying the firing order remap and the wasted spark and coil pairing, and setting the per cylinder event masks. Then a **dwell update** runs per spark event, it computes the coil charge time from a measured charge feedback times a harness multiplier with battery voltage comp, or a fixed dwell times a per cylinder error multiplier, clamps it between voltage derived min and max limits, and writes each coil channel and its angle to the TPU. It is coil on plug. There is also a coil setup that builds the dwell versus voltage curve and the multi strike config, and a repetitive spark controller for the multi strike count.
+# Part 5, Timing and synchronization
 
-One nuance worth stating plainly, the per cylinder fire mask in the spark path is a **software shadow used for misfire bookkeeping**, it is not the signal the coil hardware fires on, the actual coil charging is governed by the dwell written to the TPU. How any of that gets leveraged for a custom spark strategy is REDACTED.
+## Crank and cam synchronization
 
-### The spark and fuel enable gate
+For the engine to run, the PCM must know exactly where the crankshaft is and which stroke each cylinder is on, which requires both the crankshaft position and the camshaft position, since the crankshaft alone cannot distinguish the compression stroke from the exhaust stroke. A capture routine reads the timing hardware to obtain the current crankshaft angle, the tooth to tooth interval, and the synchronization state, and it correlates the camshaft identification signal to establish full engine phase. A speed computation then derives engine speed from the interval and the cylinder count and produces the firing order index. Because the actual tooth decoding is performed in timing hardware microcode, there is no ordinary decoding routine to inspect, the strategy reads finished results.
 
-There is a spark and dwell event scheduler that gates every event on a global spark disable flag plus a spark blank counter, and when it is disabled it writes zero dwell to all channels. But here is the thing, that same global flag is ALSO read by the fuel injector scheduler which then diverts to the injector disable routine, so the one factory global kill cuts **spark and fuel together**, it is not a spark only cut. That flag is owned entirely by the crank sync state machine so during normal running it just stays clear. Anything about building a cleaner custom cut off of this is REDACTED.
+There is an elegant detail in how speed is handled for the most time critical decisions. Rather than carrying engine speed as a revolutions per minute value, the module often carries the crankshaft period directly, the time between tooth edges. A faster engine produces a shorter period. Even the rev limit threshold is stored this way, as a period rather than a speed, so that being over the limit simply means a tooth arrived sooner than the threshold interval. Because these periods are always positive, they can be compared with simple integer comparisons in the places where there is no time to spare for anything heavier.
 
+A synchronization state machine owns the global combustion enable flag. It progresses through reset, acquisition, confirmation, and running states, holding combustion disabled while the engine is unsynchronized, during cranking, a stall, or a missing tooth event, and enabling it once synchronization is confirmed. Supporting functions handle the acquisition phases, a tooth pattern snapshot, a missing tooth and gap detector, threshold and speed gating, timing calibration selection, and a diagnostic status word. A hardware enable toggles the ignition driver power in step with the flag.
 
-## Crank and cam sync and RPM
+## The injector and timing channel layer
 
-A **crank capture ISR** reads the TPU capture register for the current crank angle, the tooth to tooth period, and the sync state, and it correlates the cam (CID) capture for full crank and cam phase. The **RPM compute** derives RPM from the period and the cylinder count and gives the firing order cylinder index. Since the actual tooth decode is TPU microcode there is no big decompilable crank ISR, you are just reading the TPU result registers.
+Underneath the schedulers is a low level hardware abstraction layer, a collection of small functions that write an injector pulse width, clear a channel, perform a bank write, encode an injection angle, set a channel's mode bits, arm a channel, read a channel's captured value, and read its status, along with the dwell and spark angle writers. These are the direct interface to the timing hardware, and naming them is what makes the higher level schedulers legible rather than a wall of raw register operations.
 
-Little detail I think is slick, the PCM does not really keep RPM around for the time critical stuff, it keeps the **crank period**, the time between crank edges, and faster engine means shorter period, and the rev limit is even stored as a period not an RPM, so over the limiter really means the crank edge showed up too soon, and because those periods are positive floats the code can compare them as plain integers in the spots where it can not afford the float unit. Just a cool bit of how Ford did it.
+# Part 6, Knock
 
-A **crank sync state machine** owns that global spark and fuel enable flag, it goes reset then acquire then confirm then running, holding the kill flag while it is unsynced (cranking, stall, missing teeth) and clearing it once sync is confirmed, and there is helpers for the acquire sub phases, a tooth pattern snapshot, a missing tooth and gap detector, threshold and RPM gating, timing cal select, and a status word, plus a hardware driver enable that toggles the ignition driver power right along with the flag.
+Knock, also called detonation, is the uncontrolled secondary ignition of the end gas in the cylinder, and sustained knock destroys engines, so detecting and suppressing it is a safety critical function. On this platform the per cylinder knock detection and the retard integration are performed in the dedicated external knock circuit rather than in the main strategy. The firmware configures that circuit and reads its results, which is why the per cylinder knock indications are referenced in relatively few places in the main code, the heavy signal processing happens in the chip.
 
-Under all of it is a low level **injector and TPU channel HAL**, little functions to write an injector pulse width, clear a channel, do a bank write, encode an injection angle, set a channel's mode bits, arm a channel, read a channel capture, read status, plus the dwell and angle writers, and naming that whole HAL is what makes every scheduler's raw register pokes actually readable, yk otherwise it is just a wall of register writes.
+The firmware side consists of a sense setup that programs the per cylinder gains and the readback scaling into the chip, a detect setup that computes the per cylinder knock thresholds from speed and load tables along with the noise and knock crank angle windows and the enabling conditions of load, coolant, and speed, a rate scheduler that chooses between fast and normal retard and recovery ramp rates based on a transient counter, a rate update that pushes those rates into the chip and rearms the detection window each cylinder event, a sensor monitor that compares the measured knock magnitudes against noise tables to set sensor circuit faults, and a coordinator that prevents the knock self test and the oxygen sensor self test from running at the same time. The accumulated retard then limits spark through the arbiter's knock term, bounded by a retard authority limit.
 
+The practical takeaway is that because the detection and integration happen in hardware, the retard algorithm itself is fixed. Its gains, windows, rates, and authority are all adjustable through calibration, but the fundamental behavior cannot be rewritten by changing a table.
 
-## Knock
+# Part 7, Variable cam timing
 
-The per cylinder knock detection and the retard integration are **done in the external knock ASIC**, not in the main code, the firmware just configures the chip and reads the results back, and that is why the per cylinder knock flags have barely any references in the code, cause the real work happens in silicon.
+This engine uses twin independent variable camshaft timing, with each cylinder bank having its own camshaft position sensor, its own control loop, and its own oil control valve that hydraulically advances or retards that camshaft. Variable cam timing lets the engine optimize valve events across the operating range, improving low speed torque, high speed power, idle quality, and emissions, all from the same hardware.
 
-* a **sense setup** programs the per cylinder channel gains and the integrator read back scaling into the ASIC.
-* a **detect setup** computes the per cylinder knock thresholds from rpm and load maps, the noise and knock crank angle windows, and the enable gate, load and coolant and RPM windows plus closed loop ready, and aggregates the per cylinder knock bits.
-* a **rate scheduler** picks fast or normal recover and retard ramp rates off a transient counter, and a **rate update** pushes those into the ASIC and rearms the window each cylinder event.
-* a **sensor monitor** compares the ASIC's knock magnitudes against noise window tables and sets the knock sensor circuit codes, that is sensor health, not the retard.
-* a **test coordinator** keeps the knock test and the O2 self test from stepping on each other.
+The control is a five stage chain. An enable and ramp stage builds a normalized authority for how much cam advance is currently allowed, gated by the absence of knock, the absence of faults, and a temperature window, and reduced when knock is detected. A scheduling stage reads speed and load target tables, trims them for oil temperature since oil viscosity affects how quickly the mechanism can move, scales by the authority, and filters to smooth per bank target angles. A control stage, a proportional integral derivative loop, drives each bank's valve duty from the error between the target angle and the measured angle. A duty calculation stage converts that into the actual oil control valve command, with an open loop override and limp defaults for fault conditions. A hardware output stage writes both banks to the on chip pulse width modulation and latches any camshaft sensor faults. Because detected knock pulls cam advance back, this subsystem is also a useful window into how the whole engine responds to knock.
 
-The accumulated retard then limits spark through the arbiter's knock term under a spark retard authority limit. So the thing to know, because the integration is in hardware the retard **algorithm** is fixed, you can calibrate the gains and windows and rates and authority, but you can not rewrite the knock strategy itself without touching the ASIC, it is not just a table.
+# Part 8, Torque based control, throttle, idle, limiters
 
+## Driver demand as a torque request
 
-## Variable cam timing, Ti VCT
+A defining characteristic of this generation of control is that the accelerator pedal does not command throttle opening directly, it commands torque. The pedal position is linearized into an angle, then driver demand tables indexed by pedal and engine speed produce a desired engine torque and a desired wheel torque, with separate low range variants. A torque demand control loop converts the desired torque into a throttle area command, applying traction related gains and clipping limits, and feed forward and effective area models convert that area into a throttle angle. A final angle scheduler resolves the commanded throttle angle and applies a maximum throttle versus speed authority cap, which is the lever behind reduced power modes, and publishes the overall control state. Thinking of the whole system as a torque request flowing down to a throttle position, rather than a cable pulling a plate, is the key mental model.
 
-Dual bank, each bank has its own cam sensor, PID loop, and oil control valve solenoid, and it is a 5 stage chain:
+## The throttle position servo
 
-1. an **enable and ramp** stage builds a normalized cam advance authority, gated by no per cylinder knock and no faults and a temp window, or forced on by a switch, and detected knock pulls the cam advance back.
-2. a **schedule** stage reads the rpm and load target tables, trims by oil temp, scales by the authority, and lag filters to the per bank target angles.
-3. a **PID** stage drives the bank duty off the error between target and measured cam angle.
-4. a **duty calc** stage turns that into an oil control valve duty, with an open loop override and limp defaults.
-5. a **hardware output** stage writes both banks to the on chip MIOS PWM and latches the cam sensor faults.
+The electronic throttle must be held precisely at the commanded angle against a return spring and airflow forces, which requires a closed loop position servo. An acquire and filter stage produces two filtered throttle position feedbacks. A position error monitor compares commanded against actual and raises throttle faults on persistent error. A duty output stage converts the commanded angle into a motor pulse width, with fixed safe duties in fault modes, and drives one channel of the external ASIC, since the throttle motor is driven through an H bridge on that chip. Supporting this are mode arbitration, a drive disable that releases the plate to its limp home spring position, a relay enable state machine, a cold start enable gate, and fault reporting through a diagnostic maturation manager. Electronic throttle is safety critical, which is why it is wrapped in so much monitoring.
 
-There is also a reporting helper that mirrors the duty for the datastream. And since detected knock disables cam advance, this subsystem is actually a good reference for how the engine reacts to knock in general.
+## Idle control
 
+On this platform there is no separate idle air valve, idle air is metered by the same electronic throttle. A target function schedules the desired idle speed from base values for drive and neutral, with variants for air conditioning and cold start, a barometric correction, and a lag when shifting into gear. An idle control loop, with separate gains for opening and closing the throttle chosen by the direction of the error, outputs an idle airflow demand that is summed with the driver demand and bounded by idle limits and the closed throttle calibration. Feed forward idle airflow tables and a decel to idle dashpot support it, and a compensation raises the target under fan and air conditioning load so accessory engagement does not drag the idle down.
 
-## Electronic throttle, driver demand, idle, torque, limiters
+## The limiters
 
-### Driver demand, pedal to torque to throttle
+Understanding the limiters correctly prevents a great deal of confusion. The factory rev limiter and vehicle speed limiter are soft limiters, they are control loops that command the electronic throttle closed, and they do not cut spark or fuel. They are only active while the throttle is in normal control. A park and neutral clip caps torque and adds a speed limit off load. Separately, the rev limit is also expressed as a crankshaft period that a hard overspeed check compares against, and that hard path is the one that will resort to a fuel cut and a spark retard floor in a true overspeed event. So the limiter a driver normally feels is a throttle closer, not a cut.
 
-The pedal is read as a **torque request**, not a throttle position, so there is a linearization from pedal travel to an angle, then driver demand maps, pedal by RPM, make a desired engine torque and wheel torque, with low range variants, then a **torque demand PID** turns desired torque into a throttle area command, with traction gains in the traction state and clip limits, and feed forward and effective area models turn area into a throttle angle. An **angle scheduler** resolves the final commanded throttle angle out of all that and applies a **max throttle versus RPM authority cap**, which is basically the reduced power lever, and publishes the control state.
+## The torque model
 
-### Position servo
+Tying the throttle, spark, and transmission sections together is a central torque model. It estimates the engine's current torque and inverts the torque to spark relationship to deliver requested torque reductions quickly through spark retard, and more slowly through airflow. The transmission requests torque reduction during shifts, the traction system requests it during wheel slip, and the idle and limiter systems request it as well. This common torque currency is what lets all of these systems cooperate rather than fight.
 
-An acquire and filter makes the two filtered TP feedbacks, a **position error monitor** compares desired versus actual and sets throttle faults on steady state error, and a **duty output** turns the commanded angle into a PWM duty, with fixed limp duties in the fault modes, and calls the shared PWM channel driver that writes period and duty to one smart I/O ASIC channel, the throttle H bridge is one of those channels. Then there is mode arbitration, an H bridge drive disable that lets it release to the limp spring, a relay enable state machine, and a cold start enable gate, and faults get reported through a DTC maturation manager.
+# Part 9, Transmission, the 4R75E
 
-### Idle
+Automatic applications pair this engine with the 4R75E, a four speed automatic, and the PCM contains its full controller. Four cores define its behavior. A range and over rev guard validates the allowed gear from the selector position, the current gear, and vehicle speed, and inhibits manual downshifts until speed drops into a safe range so the engine cannot be over sped by a careless downshift. A torque converter clutch apply scheduler builds the clutch apply pressure from per gear engagement rate arrays and the measured slip, capped at a maximum, which controls how firmly and quickly the converter locks. A line and electronic pressure control stage computes the main hydraulic pressure from a torque term with per shift floors and converts it into the pressure control solenoid command, and this is the primary lever for shift firmness, since higher pressure holds more clutch capacity at the cost of harshness. A shift torque management function coordinates engine torque reduction with the transmission during the actual shift, which is what makes a shift feel soft or firm from the engine side. The shift points themselves, the speeds at which the transmission changes gear for a given throttle, live in the shift schedule tables indexed by throttle and speed.
 
-On this platform **idle air IS the throttle**, there is no separate idle air valve, so a target function schedules the desired idle RPM from drive and neutral base values, with A/C on and cold start variants, a baro correction, and an in gear lag, and an ISC PID with separate opening and closing gains, picked by the error direction, outputs an idle throttle demand that gets summed with driver demand, bounded by idle min and max and the closed throttle cal. There is feed forward idle airflow tables and a decel to idle dashpot too, and a fan and A/C idle up that raises the target under accessory load.
+# Part 10, Driver interface
 
-### Limiters, important one
+The steering wheel cruise control buttons are implemented as an analog resistor ladder read on a single converter slot, which means each button produces a distinct voltage rather than a digital signal, and on this variant they are not broadcast on the communication bus. An acquire function classifies the ladder voltage into a button code with a short debounce, and a decode function produces the button command while also maintaining a hold timer measuring how long a button has been held and flags for held past a threshold. A state machine runs the cruise logic across its off, armed, and engaged states and is disabled by the brake, the clutch, cranking, and over temperature conditions. Both the acquire and decode functions run every loop regardless of whether cruise is active, so the current button state and hold time are always available to the rest of the strategy.
 
-The factory rev limiter and speed limiter are **soft**, they are PI controllers that just command the electronic throttle closed, they do NOT cut spark or fuel, and they only work while the throttle is in normal control. There is also a park and neutral clip that caps torque and adds an RPM limit off load. Separately from the soft limiter, the rev limiter also expresses its limit RPM as a crank period that a hard overspeed test checks against, and that hard path is the one that will actually resort to a fuel cut and a spark retard floor at true overspeed. So just know the rev limiter you feel normally is a throttle closer and not a cut, and that matters alot if you want a real limiter, but how you would build a proper spark based hard cut off of any of this is REDACTED.
+# Part 11, Communication and diagnostics
 
+## The communication bus
 
-## Transmission, 4R75E
+The PCM talks to the rest of the vehicle over a Controller Area Network bus. Two primitives underlie all of it, a frame transmit function and a mailbox read and configure function, together with a queued broadcast loader. On the transmit side the PCM broadcasts engine data, including the frame the instrument cluster reads to drive the tachometer, which carries engine speed in its first bytes along with vehicle speed and pedal position, a gear and shift state frame, a status frame carrying the transmission range selector field and various flags, a manual or automatic indicator, and a proprietary multi byte data packet. On the receive side it accepts transmission torque and temperature from the transmission controller in an offset encoded form, brake, clutch, and neutral status, antilock brake wheel speeds, and mode flags, and it answers diagnostic requests. The speed, vehicle speed, and pedal fields use a simple binary scaling, so for example the tachometer value is engine speed multiplied by a fixed constant packed into two bytes.
 
-Automatic applications run the 4R75E, and there is 4 main cores:
+## Diagnostics and monitors
 
-* a **range and over rev guard** validates the allowed gear from selector position, current gear, and vehicle speed, and inhibits manual downshifts until speed drops so you can not grenade it.
-* a **TCC apply pressure** scheduler builds the torque converter clutch pressure from per gear lockup rate arrays and slip, capped by a max.
-* a **line and EPC pressure** controller computes main pressure from a torque term with per shift floors and turns it into the pressure control solenoid command, and that is your main **shift firmness** lever.
-* a **shift torque management** function coordinates the spark and torque reduction with the trans during the actual shift, that is what makes a shift soft or firm from the engine side.
+All diagnostic data requests are answered from a single sorted descriptor table of several hundred entries. Each entry carries the parameter or data identifier, a mode byte distinguishing current data from freeze frame data from the enhanced manufacturer specific space, a handler type, a pointer to the live source of the value, and formatting arguments. A request is resolved by a binary search on the mode and identifier, dispatching either to a computed path that reads the live source, applies availability gating, and formats the result, or to a simpler raw path. The table includes the standard legislated parameters such as speed, pressures, airflow, timing, load, commanded ratio, fuel trims, oxygen sensors, and catalyst temperatures, as well as a large set of manufacturer enhanced identifiers.
 
-The actual up and down shift points are in the shift schedule tables, throttle by speed. There is a bunch of trans cals, gear ratio error thresholds, TCC slip and apply and release schedules, shift pressure and shift phase stuff, torque reduction targets, extra, and I have got all of it mapped, see the [cal section](#calibration-the-tables-and-scalars).
+Separately, the emissions monitors are calibration driven state machines that decide when to illuminate the malfunction indicator lamp, they do not change how the engine runs. The misfire monitor infers misfires from crankshaft speed deviation, since a cylinder that does not fire fails to accelerate the crankshaft as expected, gated by torque thresholds and speed and coolant windows. The catalyst efficiency and rear oxygen monitors are gated by coolant, air temperature, vehicle speed, and a minimum rear sensor temperature. The evaporative purge monitor runs a multi phase flow test gated by operating conditions and time limits. The oxygen sensor heater monitors watch heater current and duty.
 
+# Part 12, Accessories
 
-## Cruise and steering wheel switches
+A smart alternator and charging controller provides a load responsive charging voltage and raises the idle target so electrical load does not drag the idle down. Cooling fan control is threshold based on coolant and cylinder head temperature with an idle increase when the electric fan engages, and notably the over temperature engine protection is a separate staged cylinder cut path rather than a fan table. Air conditioning engagement adds an idle compensation in drive and neutral. Exhaust gas recirculation, where fitted, is selected by a hardware type switch and is minimal on this engine family.
 
-The steering wheel cruise buttons are an **analog resistor ladder** on a single QADC slot, so they are NOT on the CAN bus on this read, which is kinda handy to know. An acquire function classifies the ladder voltage into a button code with a 2 sample debounce, a decode function makes the button command and already keeps a **hold timer**, seconds since the button last changed, plus held past threshold flags, and a state machine runs the cruise logic, off and armed and engaged, and it gets shut off by brake, clutch, cranking, and over temp. And both the acquire and decode run every loop no matter what cruise is doing, so the button position and the hold time are always sitting there available.
+# Part 13, The calibration surface
 
+The calibration is the tuning surface, the set of thousands of scalars and single and two dimensional tables that shape the engine's behavior. Scalars are single values, a threshold or a gain. Tables are grids of values, most commonly indexed by engine speed on one axis and load on the other, with the stored values being real floating point numbers. A two dimensional table is read by interpolating between the four surrounding cells, so the engine gets a smooth value between the defined breakpoints rather than a stair step. The axis breakpoints themselves are stored alongside the table so that the spacing of the grid can be uneven, finer where the engine is sensitive and coarser elsewhere.
 
-## CAN bus
+What follows is an overview of the major calibration groups and the kind of parameters each contains, named by the generic parameter identifiers that describe their function.
 
-Two main primitives, a transmit frame function and a mailbox read and config function, plus a queued broadcast loader.
+**Adaptive fuel learning** contains the master enable for adaptation, the maximum and minimum learned correction limits, the warm up gain, the temperature and load thresholds that allow learning, and the reset behavior. This is the group that quietly undoes fuel changes if adaptation is left on.
 
-On the transmit side the PCM broadcasts engine data, including the frame the instrument cluster reads for the **tach**, engine RPM is in the first two bytes, with vehicle speed and pedal position, a gear and shift state frame, a status frame with the PRNDL bitfield and a bunch of flags, a manual or auto indicator, and a proprietary multi byte datastream packet. On the receive side it takes transmission torque and temp from the TCM, offset encoded, brake and clutch and neutral status, ABS wheel speeds, and mode flags, and it answers diagnostic requests on the OBD request IDs. The RPM and speed and pedal fields use a fixed power of two binary scaling, so the tach is literally RPM times a constant in two bytes.
+**Closed loop fuel** contains the jumpback step and amplitude of the oxygen integrator, the hold time fraction, the modulation limits, the short term trim clamps, the rich and lean authority rates, and the peak to peak amplitude behavior.
 
+**The fuel injector model** contains the low slope, the high slope, the breakpoint between them, the minimum pulse width, the reference pressure, and the compensation tables for breakpoint, slope, and battery voltage versus pressure. This is the group that must be changed when injector size changes.
 
-## OBD II and the monitors
+**Cranking and cold start fuel** contains the cranking ratio, the fuel multiplier versus time since start, the wall wetting lost fuel, the injection delay, and the cranking spark.
 
-All the diagnostic data requests get answered out of one **sorted descriptor table** of a few hundred entries, and each descriptor has the PID or DID, an internal mode byte, current data or freeze frame or the enhanced data identifier space, a handler type, a computed callback type versus small raw or table codes, a pointer to the live source channel, and formatter args. The lookup is a binary search keyed on mode and identifier, and it dispatches either to a computed value path, reads the live source, does availability gating, formats through the OBD transfer function, or a raw path. The table has got all the standard mode 1 and mode 2 PIDs, RPM, MAP, MAF, timing, load, commanded AFR, fuel trims, O2s, cat temps, extra, and a big set of Ford enhanced DIDs.
+**Decel fuel shut off** contains the entry and exit speeds, the load ceiling, the hysteresis thresholds, and the target ratio as fuel returns.
 
-The OBD **monitors** are calibration driven state machines that decide when the light comes on, they do not change how the engine runs:
+**Spark** contains the main advance tables with their speed and load axes, the failsafe cooling spark modifier, the lugging retard, and the best torque set.
 
-* **Misfire**, inferred from crank speed, torque, deviation, with torque thresholds, an RPM window, a coolant window, and a failure action switch.
-* **Catalyst efficiency and rear O2**, window gated by coolant, air temp, vehicle speed, and a minimum rear sensor temp.
-* **Evap purge**, a multi phase flow test gated by idle and cruise enables, a load ceiling, and per phase time limits.
-* **O2 heater**, current and duty cycle monitors with their own enables.
+**Borderline and knock spark** contains the borderline knock table, the ethanol content adjustments, the multiplier on the borderline value by ethanol, and the modifier used when a knock sensor has failed. This is where real timing under load is set.
 
+**Knock sensor** contains the per cylinder gains, the knock and noise crank angle windows, the thresholds by speed and load, the retard and recovery rates, and the retard authority.
 
-## Accessories
+**Air, load, and speed density** contains the airflow transfer table, the volumetric efficiency tables blended by cam advance, the reference standard air charge, the air density temperature table, the transient fuel terms, and the charge predictors.
 
-A **smart alternator and charge** controller gives a load responsive charging voltage and an idle RPM adder so electrical load does not sag the idle. **Cooling fan** control is threshold based off coolant and head temp with an electric fan idle up, and the over temp protection is a separate staged cylinder cut path, not a fan table. **A/C** adds an idle up comp in drive and neutral. **EGR** where it is even fitted is picked by a hardware type switch and is pretty minimal on this engine family.
+**Variable cam timing** contains the speed and load target tables per bank, the oil temperature trim, the authority ramp, the control loop gains, and the oil control valve duty limits.
 
+**Electronic throttle, driver demand, and idle** contains the pedal linearization, the driver demand torque tables indexed by pedal and speed, the torque control loop gains, the maximum throttle versus speed authority cap, the idle target schedules for drive, neutral, air conditioning, and cold, the idle loop opening and closing gains, and the dashpot.
 
-## Calibration, the tables and scalars
+**Limiters** contains the soft rev and speed limit gains and setpoints, the park and neutral clip, and the hard overspeed limit.
 
-Ok so this is the tuning side, and there is a LOT, like thousands of scalars and tables, and I mapped them by what function reads them so I know what each one actually does, not just the name. I am not gonna paste all 13k plus of them here obviously but here is the groups and the important ones per system, yk:
+**Transmission** contains the shift schedule tables indexed by throttle and speed, the gear ratio error thresholds, the torque converter clutch apply and release and engagement rate arrays, the line and electronic pressure control schedules that set shift firmness, the shift pressure and phase tables, and the torque reduction targets.
 
-* **Adaptive learning (KAM)**, FADPT_SW (adaptive on and off), MAXADP and MINADP (max and min learned correction), AMP_MUL, FAST_ADPT_GN (warm up gain), VECT3 and VECT5 (min temps), KAM_NO_RESET, DECEL_CELL_SW, extra. This is the stuff that learns out your changes if you leave it on.
-* **Closed loop fuel**, JUMP_FRAC and AMP_MULT (the EGO jumpback), HOLD_TM_PCT, LAM_MOD_MIN and LAM_MOD_MAX, DYN_LMIN and DYN_LMAX (short term trim clamps), MAX_ROA_L and MAX_ROA_R (rate of authority lean and rich), and the Peak to Peak amplitude table FN1352 with its filter PTPAMP_FK.
-* **Fuel injector model**, FUEL_BKPT (breakpoint), AHISL (hi slope), ALOSL (low slope), MINPW (min pulse width), RF_DPREF_CAL (reference pressure drop), and the comp tables FNPW_BKCOMP and FNPW_HSCOMP and FNPW_LSCOMP and FNPW_OFFCOMP, breakpoint and slope and battery and pressure comp. These are what you change for bigger injectors.
-* **Crank and cold start fuel**, cranking lambda, the startup fuel versus time tables (FN018xx families), wall wetting lost fuel, injection delay, extra.
-* **DFCO**, DFSRPM_PC, DFLOD, DFSECT, DFS_PRV_N, LAM_REACT.
-* **Spark**, the main spark tables with their rpm (Xnorm) and load (Ynorm) axes (FN016x and FN017x and FN012x families), failsafe cooling spark modifier FN701, lugging retard FN723C plus SPK_LUG_TIM, and the whole MBT set.
-* **Borderline and knock spark**, FN2200A (the Borderline Knock Table, this is the big one), FN2270 (borderline adj for 100% ethanol), FN727 (BKT multiplier by % ethanol), SPK_FMM_ADJ (modifier for a failed knock sensor). This is where real timing under load tuning happens.
-* **Knock sensor**, the per cylinder gains, the knock and noise window angles, the thresholds by rpm and load, the retard and recover rates, and the retard authority.
-* **Air and load and speed density**, the MAF transfer table, the VE tables that blend by cam advance, the standard air charge scaler, the air density temp by temp table, the transient fuel (ACDC) stuff, the charge predictors.
-* **Variable cam**, the rpm and load cam target tables per bank, the oil temp trim, the authority ramp, the PID gains, and the OCV duty limits.
-* **Electronic throttle and driver demand and idle**, the pedal linearization, the driver demand torque maps (pedal by rpm), the torque demand PID gains, the max throttle versus rpm authority cap, the idle target schedules (drive and neutral and AC and cold), the ISC PID open and close gains, the dashpot.
-* **Limiters**, the soft rev limit and speed limit PI gains and setpoints, the park and neutral clip, and the hard overspeed limit, stored as a period.
-* **Trans**, shift schedule tables (throttle by speed), gear ratio error thresholds (GR1ERR_LVL through GR4ERR_LVL, GRV_ERR_TIM), TCC apply and release and lockup rate arrays, line and EPC pressure (shift firmness), shift pressure and phase tables, and the torque reduction targets.
-* **Torque model**, the torque versus spark model coefficients, the torque limits, and the driver demand torque tables.
-* **Other groups mapped**, alternator and charge, axle (ratio and tire), canister purge and evap, dashpot, ethanol and flex fuel, fuel pump and returnless, IMRC, MAF monitor, O2 front and rear, traction control, transient fuel, and the VID block (vehicle ID and part info).
+**Torque model** contains the torque to spark model coefficients, the torque limits, and the driver demand torque tables.
 
-Thats the gist of what is tunable and what each group does, yk.
+Further groups cover the alternator and charging, the axle ratio and tire size, evaporative and canister purge, the decel dashpot, ethanol and flexible fuel handling, the fuel pump and returnless pressure control, intake manifold runner control, airflow monitoring, the front and rear oxygen sensors, traction control, transient fuel, and the vehicle identification block.
 
+# Part 14, Memory and regions
 
-## The numbers, what got done
+At a conceptual level the module's memory divides into a region of flash that holds the startup and low level code, a region that holds the main application strategy, a region that holds the large body of calibration tables and scalars, a region of random access memory that holds all the live values, sensor readings, state machines, and the battery backed learned data, and the input output space where the timing hardware, the converters, the pulse width modulation blocks, the communication controller, and the external chip all appear to the processor. The exact boundaries, and anything concerning the startup and low level region in detail, belong to the proprietary material in Part 15 and are not published here.
 
-Just to put some numbers on it since people always ask how deep this actually went:
+# Part 15, Proprietary internals, explained and REDACTED
 
-* Functions, all named, 0 left as FUN_ , **2,510**
-* Named symbols total, around **26,600**
-* Namespaces, organized by subsystem, **693**
-* **Cross references recovered, 117,852** (19,414 into the calibration and table band, and 50,100 into RAM)
-* Calibration items defined, **13,577** (12,421 scalars and 1,156 tables)
-* Instructions disassembled, around **179,000**
+This section exists so that the reference is complete in describing what the module contains, while keeping the sensitive implementation details proprietary to Trent's Tuning LLC. For each item below, the general concept is explained, and the Black Oak specific implementation is marked REDACTED.
 
-And the big one, a raw headerless bin loaded into stock Ghidra gives you basically **zero** references into the calibration band because the addresses are built in code, so those roughly 19,414 cal references and 50,100 RAM references did not exist until the custom scanner rebuilt every inline built map address, and that is the whole thing that made all of this possible, yk that is the part I am proud of lmao.
+## The bootloader
 
+A bootloader is the first software that runs when the module powers up, before the main engine strategy takes control. Its general job is to initialize the processor, decide whether the main application is valid and should be allowed to run, and provide the controlled entry point that a factory programming tool uses to erase and rewrite the module. It is the gatekeeper between a module that runs its normal code and a module that has dropped into a programming mode. The Black Oak bootloader structure, its entry points, its validation behavior, and the way it hands control to the application are **REDACTED**.
 
-## The REDACTED stuff
+## The operating system kernel
 
-So like I said up top, there is a chunk of this I am not publishing, it is Trent's Tuning internal and it stays that way. If you are wondering about any of the following, the answer here is just REDACTED:
+The kernel is the small real time operating system that schedules the control tasks, services the hardware interrupts, manages timing, and arbitrates access to shared resources so that the many subsystems described above can run together without interfering. In general terms it is what turns a pile of individual control functions into a coordinated system that meets its timing deadlines every engine cycle. The Black Oak kernel internals, its scheduler, and its service interfaces are **REDACTED**.
 
-* **Bootloader**, REDACTED
-* **Kernel and OS internals**, REDACTED
-* **Reading and writing and flashing the module**, how the bin comes off and goes back on, REDACTED
-* **Seed and key and security access**, REDACTED
-* **Checksum and how a modified bin is made valid**, REDACTED
-* **The custom OS and any custom features built on it**, custom limiters, map switching, launch, any of that, REDACTED
-* **Bidirectional controls and actuator commands**, REDACTED
+## Reading and writing the module, reflashing
 
-Everything above that line in this readme is the stock engine control logic and the calibration, which is the part that is useful to actually understand the PCM, the proprietary dev and flashing side is not here on purpose.
+Reprogramming a module means erasing its flash memory and writing new contents, which is how both a factory update and a custom calibration are installed. In general this is done over the diagnostic connection using a defined sequence of steps that places the module into a programming state, transfers the new data, and verifies it, and it is constrained by how the flash hardware itself can be erased and written. The specific paths by which Black Oak is read and written, the sequences involved, and the practical methods are **REDACTED**.
 
+## Security access, the seed and key
 
-## Full function map
+Security access is the lock that prevents unauthorized reprogramming and unauthorized access to protected functions. The general mechanism is a challenge and response. The module issues a random value, the seed, the tool must transform that seed through a secret algorithm into the correct answer, the key, and only a tool that knows the algorithm can produce a key the module accepts. This is what stops arbitrary tools from rewriting the module. The Black Oak seed and key algorithm and the security access details are **REDACTED**.
 
-Names only, grouped by subsystem, so you can see the shape of the whole thing (the bootloader and kernel and flashing and custom OS functions are REDACTED and not listed):
+## Firmware validation and checksum
 
-* **Table and math primitives**, 1D table lookup, 2D bilinear lookup, float clamp, int clamp, float lag filter, float to scaled int, elapsed time, DTC set and maturation.
-* **ADC and sensors**, QADC channel read, QADC digital port read, ASIC A to D volts read, scale group reader, throttle TP reader, secondary group B reader, ACT reader, fuel rail temp reader, IMRC reader, fuel pump duty reader, per channel rationality filter, front O2 read, rear O2 read, O2 rich and lean switch, battery filter, ACT and IAT process, MAP rationality.
-* **Air and load**, aircharge and load model, fuel aircharge calc, cam corrected VE lookup, speed density MAP model, alpha N throttle load, MAF transfer, MAP valid debounce, MAP source select, MAF rationality gate, MAF key on flow check, transient fuel (ACDC) filter, current aircharge calc, aircharge anticipate (SD and TP), air drift divisor, aircharge leak comp, load fraction versus WOT, MAF monitor dispatcher and filter and fault variants.
-* **Fuel**, injector pulse width model, closed loop fuel manager, closed loop O2 (LAMBSE) control and helper, LAMBSE limit manager and latch, KAM adaptive learn, crank fuel mode select, DFCO entry and apply and transition and enable gate, sequential injector scheduler, bank mode scheduler, overspeed scheduler, injector disable (fuel cut).
-* **Spark and dwell**, advance manager, MBT lookup and alt, borderline lookup, borderline final, borderline interp, advance ramp and limiter, limit arbiter, output apply, base select, MBT and borderline min, entry rate limit, torque model limit calc, torque model invert, angle scheduler, EOD angle write, angle floor write, dwell update, coil and dwell setup, repetitive spark control, misfire mask latch, spark output enable all, staged cylinder cut manager.
-* **Sync and HAL**, crank capture ISR, RPM compute, RPM speed update, vehicle speed update, spark and dwell event scheduler, crank sync reset and acquire and confirm and disable and enter run and restart, spark and fuel enable (synced and running), sync phase a and phase b, threshold check, RPM gate, flag setter, pattern snapshot, tooth gap detect, timing cal select, status pack, hardware driver enable, injector channel write and clear and bank write and angle write, TPU channel mode set and arm and capture read and status read, dwell write, EOD angle write, injector write.
-* **Knock and VCT**, knock sense setup, detect setup, retard rate schedule, ASIC rate update, sensor monitor, EGO test coordinator, VCT advance control, schedule, PID, duty calc, PWM output, duty report, MIOS PWM write.
-* **Throttle and idle and torque and limiters and trans**, throttle angle scheduler, torque demand PID, TP acquire and filter, position error monitor, throttle duty output, mode arbitration, drive disable, relay enable state machine, cold start enable gate, fault DTC report, shared PWM channel write, output driver init, idle target schedule, idle ISC PID, fan and AC idle up, alternator and charge control, rev limiter PI, speed limiter PI, park and neutral clip, trans range and over rev guard, TCC apply pressure, line and EPC pressure, shift torque management.
-* **CAN and OBD**, CAN transmit frame, CAN mailbox op, broadcast enqueue, engine data (tach) TX builder, powertrain broadcast builder, TCM torque RX, TCM temp RX, wheel speed RX, gear and status and mode handlers, OBD diag check, OBD service dispatch, mode 1 and 2 PID responder, PID get and lookup and value and format and available and current descriptor, diagnostic response TX, rear O2 catalyst monitor, checksum routine (details REDACTED).
-* **Driver switches**, switch input acquire, speed control switch decode, speed control state machine.
+A checksum is a value computed across a region of the firmware that lets the module verify its own contents have not been corrupted or tampered with. In general the module computes these values at startup or in the background and compares them against stored expected values, and if they do not match it can refuse to run normally and set a fault. For any modified calibration to be accepted, these values must be made consistent with the new contents. The Black Oak checksum scheme, the regions it covers, the algorithms, and how a modified image is made valid are **REDACTED**.
 
+## The custom operating system and custom features
 
-## About and contact
+Beyond the stock strategy, additional capabilities can be added to the module, such as a true spark based hard cut rev limiter that does not also cut fuel, launch control and two step, multiple switchable calibration maps, and other features the factory strategy does not provide. In general these require new code to be added and hooked into the existing control flow at carefully chosen points so that they cooperate with the stock logic and remain failsafe. The existence of these capabilities is noted here for completeness. Their design, their insertion points, the added code, and everything about the custom operating system that hosts them are **REDACTED**.
 
-This is my full teardown of the Black Oak 1472K CAN PCM (TEJF4P5), done the long way in Ghidra, and I put it out so other people doing reverse engineering or dev or tuning on these 3V trucks have an actual reference for how the computer works instead of poking at tables blind, yk. If something is wrong or you wanna add to it feel free to open an issue or hit me up.
+## Bidirectional controls
+
+Bidirectional control, sometimes called active test or output test, is the ability for a tool to command the module to actuate an output directly, for example to cycle a solenoid, command a fan, or force a component on or off for diagnosis, rather than only reading data from it. In general these are implemented as diagnostic service routines that the module exposes, gated by the appropriate conditions and often by security access. The Black Oak bidirectional control services, their identifiers, and the actuation details are **REDACTED**.
+
+# Part 16, Scope of the teardown
+
+To give a sense of the completeness of the work behind this reference, the teardown identified and named every function in the module and organized them into a deep hierarchy of subsystem groupings, and it defined the full set of calibration scalars and tables across every subsystem. In round terms the module contains on the order of a few thousand distinct functions and well over ten thousand calibration items, organized into several hundred named subsystem groups spanning everything described in this document. Nothing in the image is left as unidentified code. The result is the complete functional picture presented here, from sensor inputs through the control mathematics to the hardware outputs.
+
+# Part 17, Full function map
+
+This is a names only map of the control functions by subsystem, so the overall shape of the strategy is visible in one place. The startup, kernel, reflashing, and custom operating system functions are proprietary and are not listed, consistent with Part 15.
+
+**Table and math primitives.** One dimensional table lookup, two dimensional bilinear lookup, floating point clamp, integer clamp, lag filter, float to scaled integer conversion, elapsed time, and diagnostic trouble code set and maturation.
+
+**Analog and sensors.** Converter channel read, digital port read, external chip analog read, scaling group reader, throttle position reader, secondary group reader, charge temperature reader, fuel rail temperature reader, runner control position reader, fuel pump duty reader, per channel rationality filter, front and rear oxygen reads, oxygen rich and lean switch, battery filter, charge and intake temperature processing, and manifold pressure rationality.
+
+**Air and load.** Air charge and load model, fuel air charge calculation, cam corrected volumetric efficiency lookup, speed density pressure model, throttle based load, airflow transfer, pressure validity debounce, pressure source select, airflow rationality gate, key on flow check, transient fuel filter, current charge calculation, charge prediction for both paths, normalization divisor, charge leak compensation, load versus wide open throttle, and the airflow monitor dispatcher with its filter and fault variants.
+
+**Fuel.** Injector pulse width model, closed loop fuel manager, closed loop oxygen control and helper, oxygen limit manager and latch, adaptive learning, cranking mode select, decel fuel shut off entry and apply and transition and enable gate, sequential injector scheduler, bank mode scheduler, overspeed scheduler, and injector disable.
+
+**Spark and dwell.** Advance manager, best torque lookup and alternate, borderline lookup, borderline final, borderline interpolator, advance ramp and limiter, limit arbiter, output apply, base select, best torque and borderline minimum, entry rate limit, torque model limit calculation, torque model inversion, angle scheduler, end of dwell angle write, angle floor write, dwell update, coil and dwell setup, repetitive spark control, misfire mask latch, spark output enable, and the staged cylinder cut manager.
+
+**Synchronization and hardware layer.** Crank capture, speed computation, speed update, vehicle speed update, spark and dwell event scheduler, synchronization state machine across its phases, combustion enable, phase detection, threshold check, speed gate, flag setter, tooth pattern snapshot, tooth gap detect, timing calibration select, status pack, hardware driver enable, injector channel write and clear and bank write and angle write, timing channel mode set and arm and capture read and status read, dwell write, end of dwell angle write, and injector write.
+
+**Knock and cam.** Knock sense setup, detect setup, rate schedule, chip rate update, sensor monitor, test coordinator, and the cam timing advance control, schedule, control loop, duty calculation, output, duty report, and pulse width write.
+
+**Throttle, idle, torque, limiters, transmission.** Throttle angle scheduler, torque demand loop, throttle position acquire and filter, position error monitor, throttle duty output, mode arbitration, drive disable, relay enable state machine, cold start enable gate, fault reporting, shared pulse width channel write, output driver init, idle target schedule, idle control loop, fan and air conditioning idle increase, alternator and charge control, rev limiter, speed limiter, park and neutral clip, transmission range and over rev guard, converter clutch apply pressure, line and electronic pressure control, and shift torque management.
+
+**Communication and diagnostics.** Frame transmit, mailbox operation, broadcast enqueue, engine data and tachometer builder, powertrain broadcast builder, transmission torque and temperature receive, wheel speed receive, gear and status and mode handlers, diagnostic check, service dispatch, parameter responder, parameter get and lookup and value and format and availability and descriptor, diagnostic response transmit, catalyst monitor, and the validation routine, whose details are proprietary.
+
+**Driver switches.** Switch input acquire, cruise switch decode, and the cruise state machine.
+
+# Glossary
+
+**Advance.** How far before top dead center, in crankshaft degrees, the spark fires.
+
+**Air charge.** The mass of air trapped in a cylinder for a combustion event.
+
+**Alpha N.** Estimating air from throttle angle and engine speed.
+
+**Arbiter.** A function that selects a single output from several candidates, here by taking the minimum.
+
+**Big endian.** A convention for the order in which the bytes of a multi byte number are stored in memory.
+
+**Bank.** One side of a V engine, with its own set of cylinders, oxygen sensor, and camshaft.
+
+**Borderline.** The most spark advance that is safe before knock, as opposed to the advance that gives maximum torque.
+
+**Calibration.** The data layer, the tables and scalars that shape behavior without changing the program.
+
+**Closed loop.** Control that measures its result and corrects, as opposed to open loop which trusts a model.
+
+**Dwell.** The time a coil is charged before it fires.
+
+**ECT.** Engine coolant temperature.
+
+**EGO.** Exhaust gas oxygen, the oxygen sensor and the fuel control built on it.
+
+**Hysteresis.** Using different thresholds for turning something on and off so it does not rapidly toggle.
+
+**Keep alive memory.** Battery backed memory that retains learned values across key cycles.
+
+**Knock.** Uncontrolled secondary combustion that can damage the engine.
+
+**Load.** Air charge relative to a reference, the main vertical axis of most tables.
+
+**MBT.** The spark advance for maximum brake torque.
+
+**Open loop.** Control from a model without correction from a sensor.
+
+**PID.** A proportional integral derivative control loop, a standard way to drive an output toward a target.
+
+**PCM.** Powertrain control module, the computer described here.
+
+**Pulse width.** The length of time an output is held on, for an injector the opening time, which sets fuel quantity.
+
+**Speed density.** Estimating air from manifold pressure, temperature, and volumetric efficiency rather than from an airflow sensor.
+
+**Stoichiometric.** The chemically ideal air to fuel ratio for complete combustion.
+
+**Strategy.** The program layer, the compiled control code, as opposed to the calibration.
+
+**Transient fuel.** The extra or reduced fuel during rapid throttle changes to account for fuel films on the port walls.
+
+**Volumetric efficiency.** How effectively a cylinder fills with air compared to its theoretical capacity.
+
+# About and contact
+
+This reference is a complete functional teardown of the Ford 5.4L 3V Black Oak 1472K CAN powertrain control module, published so that others working on these trucks have an accurate account of how the module actually works, from the sensors through the control logic to the outputs, rather than treating its tables as a black box. Corrections and additions are welcome through the repository issue tracker.
 
 **Trenton Hill, Trent's Tuning LLC**
 [trentstuning.com](https://trentstuning.com/)
 Performance Tuning that Delivers Proven Results.
 
-Copyright 2026 Trent's Tuning LLC. All Rights Reserved. This document and the reverse engineering work in it are the property of Trent's Tuning LLC and may not be copied, redistributed, or used commercially without written permission.
+Copyright 2026 Trent's Tuning LLC. All Rights Reserved. This document and the engineering work within it are the property of Trent's Tuning LLC and may not be copied, redistributed, or used commercially without written permission.
 
-**Disclaimer:** everything here is for off road, race, and research use only, do not use any of this on a vehicle operated on public roads, modifying emissions equipment or engine control on a street vehicle is against federal law, and I am not responsible for anything anybody does with this info, tune at your own risk and know what you are doing.
+**Disclaimer.** This material is provided for off road, race, and research use only. Do not apply any of it to a vehicle operated on public roads. Modifying the emissions control or engine management of a street vehicle is a violation of federal law. Nothing here is a guarantee of fitness for any purpose, and the author accepts no responsibility for how it is used. Work on engine control systems carries real risk to equipment and to people, proceed only with the appropriate knowledge and facilities.
