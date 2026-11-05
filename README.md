@@ -14,7 +14,7 @@ Copyright 2026 Trent's Tuning LLC. All Rights Reserved.</p>
 
 This document and all of the engineering work behind it are the property of Trent's Tuning LLC and were authored by Trenton Hill. It is copyrighted and protected, 2026 Trent's Tuning LLC, all rights reserved. You are welcome to read it, learn from it, and reference it for your own study and research. You may not copy it, repackage it, resell it, present it as your own work, or use it in a commercial product or service without written permission from Trent's Tuning LLC.
 
-Several topics in this reference are marked **REDACTED**. For those topics the document still explains what the thing is and what it does in general engineering terms, but the Black Oak specific implementation details are proprietary to Trent's Tuning LLC and are deliberately withheld. This covers the bootloader, the operating system kernel, module reading and writing and reflashing, security access and the seed and key exchange, the firmware validation and checksum, the custom operating system and any custom features, and bidirectional actuator control.
+Several topics in this reference are marked **REDACTED**. For those topics the document still explains what the thing is and what it does in general engineering terms, but the Black Oak specific implementation details are proprietary to Trent's Tuning LLC and are deliberately withheld. This covers the bootloader, the operating system kernel, module reading and writing and reflashing, security access and the seed and key exchange, the firmware validation and checksum, the custom operating system and any custom features, and bidirectional controls.
 
 ## How to read this reference
 
