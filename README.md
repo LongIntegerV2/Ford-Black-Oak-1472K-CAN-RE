@@ -5,7 +5,7 @@
 <h1 align="center">Black Oak 1472K CAN</h1>
 <p align="center"><b>A Complete Technical and Functional Reference for the Ford 5.4L 3V Powertrain Control Module</b></p>
 <p align="center">Performance Tuning that Delivers Proven Results</p>
-<p align="center"><a href="https://trentstuning.com/">trentstuning.com</a></p>
+<p align="center"><a href="https://trentstuning.com/">TrentsTuning.com</a></p>
 
 <p align="center"><b>Written by Trenton Hill, Trent's Tuning LLC</b><br>
 Copyright 2026 Trent's Tuning LLC. All Rights Reserved.</p>
