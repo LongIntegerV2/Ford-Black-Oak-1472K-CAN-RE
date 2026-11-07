@@ -7,7 +7,7 @@
 <p align="center">Performance Tuning that Delivers Proven Results</p>
 <p align="center"><a href="https://trentstuning.com/">TrentsTuning.com</a></p>
 
-<p align="center"><b>Written by Trenton Hill</b><br>
+<p align="center"><b>Written by a homosexual farm animal fucker<br><br>
 Copyright 2026 Trent's Tuning LLC. All Rights Reserved.</p>
 
 ## Copyright and ownership
