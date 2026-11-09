@@ -18,10 +18,12 @@ Several topics in this reference are marked **REDACTED**. For those topics the d
 
 ## How to read this reference
 
-This is written to take someone from new to the subject all the way to an engineering level understanding of the Black Oak 1472K CAN powertrain control module, which from here on is called the PCM. It describes the platform in general rather than any one vehicle or calibration file, so there are no part specific identifiers and no memory addresses anywhere in it. Terms that may be unfamiliar are explained the first time they appear, and there is a full glossary at the end. If you are brand new, read it top to bottom. If you already know engine control, you can jump to any subsystem, since each section stands on its own.
+This is written to take someone from new to the subject all the way to an engineering level understanding of the Black Oak 1472K CAN powertrain control module, which from here on is called the PCM. It describes the platform in general rather than any one vehicle or calibration file, so the functional reference itself carries no part specific identifiers. The only addresses anywhere in this repository are the handful of load offsets in the Ghidra section below, which you need in order to open a raw read at all. Terms that may be unfamiliar are explained the first time they appear, and there is a full glossary at the end. If you are brand new, read it top to bottom. If you already know engine control, you can jump to any subsystem, since each section stands on its own.
 
 ## Table of contents
 
+* [Repository contents](#repository-contents)
+* [Loading this module in Ghidra](#loading-this-module-in-ghidra)
 * [Part 1, Foundations](#part-1-foundations)
 * [Part 2, Sensing and inputs](#part-2-sensing-and-inputs)
 * [Part 3, Air and fuel](#part-3-air-and-fuel)
@@ -41,6 +43,25 @@ This is written to take someone from new to the subject all the way to an engine
 * [Part 17, Full function map](#part-17-full-function-map)
 * [Glossary](#glossary)
 * [About and contact](#about-and-contact)
+
+## Repository contents
+
+Alongside this reference, the repository includes a small Ghidra processor spec so you can load a raw Black Oak read correctly and start reading the module in the same environment it was taken apart in.
+
+* **`MPC565_BlackOak.pspec`** The processor spec. It presets the on chip memory regions and declares the small data bases, so Ghidra's own PowerPC analysis resolves the register relative accesses on its own, with no scripting.
+* **`MPC565_BlackOak.ldefs`** The language definition. It registers a selectable PowerPC variant for this module that reuses Ghidra's bundled PowerPC core and compiler spec unmodified, so nothing here replaces or patches Ghidra itself.
+
+Both files are original work that describe the module's factual memory layout. They contain no Ford code or data. You may use and redistribute them provided the copyright notice inside each file stays intact. They are provided as is, with no warranty.
+
+## Loading this module in Ghidra
+
+1. Copy both files into your Ghidra PowerPC language folder, `Ghidra/Processors/PowerPC/data/languages/`, then restart Ghidra. The variant **Ford MPC565 PCM, Black Oak 1472K CAN** now shows up in the language picker.
+2. Import your raw read. Format **Raw Binary**, language the new **MPC565 Black Oak** variant, base address **0x0**, and import.
+3. The on chip RAM and register regions and the small data bases are applied automatically from the spec, so register relative reads and writes land on real memory instead of falling into unmapped space.
+4. These reads place the upper flash bank at file offset **0x70000**, but the code addresses it at **0x500000**. In the Memory Map window add one block for it, start `0x500000`, length `0x100000`, initialized from the file bytes at offset `0x70000`. The lower bank at `0x0` is already the main imported block. The spec file comments spell this out as well.
+5. Run Auto Analysis with the defaults. Ghidra's PowerPC analyzer reads the small data bases out of the spec and recovers the register relative cross references on its own.
+
+What this gets you is a clean, correct load and the cross references that Ghidra's standard analysis can recover by itself. Going from that starting point to a fully mapped module, every table and every live variable tied to the exact function that touches it, is the work this reference walks through, and doing that yourself is a good part of the point. The spec hands you a correct starting line. The rest is yours to earn, and it is very much worth earning.
 
 # Part 1, Foundations
 
@@ -262,7 +283,7 @@ Further groups cover the alternator and charging, the axle ratio and tire size, 
 
 # Part 14, Memory and regions
 
-At a conceptual level the module's memory divides into a region of flash that holds the startup and low level code, a region that holds the main application strategy, a region that holds the large body of calibration tables and scalars, a region of random access memory that holds all the live values, sensor readings, state machines, and the battery backed learned data, and the input output space where the timing hardware, the converters, the pulse width modulation blocks, the communication controller, and the external chip all appear to the processor. The exact boundaries, and anything concerning the startup and low level region in detail, belong to the proprietary material in Part 15 and are not published here.
+At a conceptual level the module's memory divides into a region of flash that holds the startup and low level code, a region that holds the main application strategy, a region that holds the large body of calibration tables and scalars, a region of random access memory that holds all the live values, sensor readings, state machines, and the battery backed learned data, and the input output space where the timing hardware, the converters, the pulse width modulation blocks, the communication controller, and the external chip all appear to the processor. The exact boundaries, and anything concerning the startup and low level region in detail, belong to the proprietary material in Part 15 and are not published here. The Ghidra spec in this repository sets up the regions you need to load and analyze a read, and nothing beyond that.
 
 # Part 15, Proprietary internals, explained and REDACTED
 
@@ -299,6 +320,8 @@ Bidirectional control, sometimes called active test or output test, is the abili
 # Part 16, Scope of the teardown
 
 To give a sense of the completeness of the work behind this reference, the teardown identified and named every function in the module and organized them into a deep hierarchy of subsystem groupings, and it defined the full set of calibration scalars and tables across every subsystem. In round terms the module contains on the order of a few thousand distinct functions and well over ten thousand calibration items, organized into several hundred named subsystem groups spanning everything described in this document. Nothing in the image is left as unidentified code. The result is the complete functional picture presented here, from sensor inputs through the control mathematics to the hardware outputs.
+
+The Ghidra spec in this repository is the front door to that work. It will not hand you the finished map, but it will put you in the same correct starting position the teardown began from, so the structure described in this reference is yours to rediscover and verify for yourself.
 
 # Part 17, Full function map
 
@@ -380,12 +403,11 @@ This is a names only map of the control functions by subsystem, so the overall s
 
 # About and contact
 
-This reference is a complete functional teardown of the Ford 5.4L 3V Black Oak 1472K CAN powertrain control module, published so that others working on these trucks have an accurate account of how the module actually works, from the sensors through the control logic to the outputs, rather than treating its tables as a black box. Corrections and additions are welcome through the repository issue tracker.
+This reference is a complete functional teardown of the Ford 5.4L 3V Black Oak 1472K CAN powertrain control module, published so that others working on these trucks have an accurate account of how the module actually works, from the sensors through the control logic to the outputs, rather than treating its tables as a black box. The Ghidra processor spec is included so you can open a read correctly and do that work yourself. Corrections and additions are welcome through the repository issue tracker.
 
 **Trenton Hill, Trent's Tuning LLC**
 [trentstuning.com](https://trentstuning.com/)
 Performance Tuning that Delivers Proven Results.
 
 Copyright 2026 Trent's Tuning LLC. All Rights Reserved. This document and the engineering work within it are the property of Trent's Tuning LLC and may not be copied, redistributed, or used commercially without written permission.
-
 **Disclaimer.** This material is provided for off road, race, and research use only. Do not apply any of it to a vehicle operated on public roads. Modifying the emissions control or engine management of a street vehicle is a violation of federal law. Nothing here is a guarantee of fitness for any purpose, and the author accepts no responsibility for how it is used. Work on engine control systems carries real risk to equipment and to people, proceed only with the appropriate knowledge and facilities.
