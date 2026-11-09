@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  Ford MPC565 PowerPC PCM  -  "Black Oak" 1472K CAN processor specification
+  Strategy family: RXCM6E7 / TEJF  (Ford 5.4L 3V, CAN)
+  Core: Freescale MPC565 (PowerPC Book-E / RCPU, big-endian, 32-bit, HW float)
+
+  Copyright (c) 2026 Trenton Hill, Trent's Tuning LLC.  All rights reserved.
+
+  Authored from a complete, independent reverse engineering of the Black Oak
+  1472K CAN image: 2,510 functions, 13,577 calibrations, the RAM map, and the
+  small-data bases, all read from the module's own machine code. This file is
+  original work product describing factual memory layout; it contains no Ford
+  code or data. You may use and redistribute it provided this notice stays
+  intact. Provided as-is, with no warranty. "Trent's Tuning" is a mark of
+  Trent's Tuning LLC.
+  ============================================================================
+-->
+<processor_spec>
+
+  <programcounter register="pc"/>
+
+  <!--
+    Small Data Area bases. Ghidra's PowerPC constant/reference analyzer reads
+    the symbols _SDA_BASE_ (-> r13) and _SDA2_BASE_ (-> r2) and uses them to
+    resolve r13/r2-relative loads and stores during normal auto-analysis. That
+    recovers the large majority of the RAM and read-only small-data cross
+    references with no scripting at all. Both values were confirmed from the
+    module's crt0 (r13/r2 are loaded here at 0x50002C..0x500034).
+  -->
+  <default_symbols>
+    <symbol name="_SDA_BASE_"  address="ram:0x00401800"/>
+    <symbol name="_SDA2_BASE_" address="ram:0x005AEBD8"/>
+    <symbol name="reset_vector" address="ram:0x00000100" entry="true"/>
+  </default_symbols>
+
+  <!--
+    On-chip regions that are NOT part of the flash image but are addressed by the
+    code. Declaring them means r13/r2-relative and absolute accesses resolve to a
+    real block instead of "unmapped memory," so the references actually land.
+
+      IRAM : internal SRAM + stack/KAM working area (stack grows down from
+             0x3FFC00; cos/user scratch lives in the tail).
+      SFR  : MPC565 on-chip peripheral / register window (QADC, TPU, CAN, MIOS,
+             SCI...). Length is a safe default; widen if your map needs it.
+
+    The flash blocks (FLASH_0 and the banked FLASH_5) are created at import time
+    by the loader, not here, because they are backed by file bytes. See the
+    README for the one-time banked-FLASH_5 import step.
+  -->
+  <default_memory_blocks>
+    <memory_block name="IRAM" start_address="ram:0x003F9800" length="0xA800"  initialized="false" mode="rw"/>
+    <memory_block name="SFR"  start_address="ram:0x00480000" length="0x10000" initialized="false" mode="rw"/>
+  </default_memory_blocks>
+
+</processor_spec>

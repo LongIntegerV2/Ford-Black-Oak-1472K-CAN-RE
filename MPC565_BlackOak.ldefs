@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  Ford MPC565 "Black Oak" 1472K CAN  -  Ghidra language definition
+  Copyright (c) 2026 Trenton Hill, Trent's Tuning LLC. All rights reserved.
+
+  Registers a selectable PowerPC variant that pairs the stock Ghidra PowerPC
+  32-bit big-endian SLEIGH model with the Black Oak processor spec, so the
+  module loads with the correct core, memory regions and small-data bases in
+  one click. Reuses Ghidra's bundled ppc_32_4xx_be.sla and ppc_32_be.cspec
+  (unmodified); only the .pspec is ours.
+  ============================================================================
+-->
+<language_definitions>
+
+  <language processor="PowerPC"
+            endian="big"
+            size="32"
+            variant="MPC565-BlackOak-TTH"
+            version="1.0.0"
+            slafile="ppc_32_4xx_be.sla"
+            processorspec="MPC565_BlackOak.pspec"
+            manualindexfile="../manuals/PowerPC.idx"
+            id="PowerPC:BE:32:MPC565-BlackOak">
+    <description>Ford MPC565 PCM, Black Oak 1472K CAN (5.4L 3V). Memory regions, small-data bases (r13/r2) and SFR/IRAM preconfigured for accurate load and automatic sdata/RAM xref recovery. Reverse engineered and mapped by Trenton Hill, Trent's Tuning LLC.</description>
+    <compiler name="EABI (big-endian)" spec="ppc_32_be.cspec" id="default"/>
+  </language>
+
+</language_definitions>
